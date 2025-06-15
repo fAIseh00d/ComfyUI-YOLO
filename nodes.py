@@ -1,4 +1,3 @@
-
 import os
 import torch
 import numpy as np
@@ -15,6 +14,71 @@ import cv2
 from PIL import ImageFont
 
 from folder_paths import models_dir
+
+def handle_list_inputs(func):
+    """
+    Universal decorator to handle list inputs for any function.
+    Automatically detects list inputs and applies the function to each item,
+    then aggregates the results by return type.
+    """
+    def wrapper(self, *args, **kwargs):
+        # Check if any argument is a list
+        has_list_arg = any(isinstance(arg, list) for arg in args)
+        has_list_kwarg = any(isinstance(value, list) for value in kwargs.values())
+        
+        # If no lists found, call function normally
+        if not has_list_arg and not has_list_kwarg:
+            return func(self, *args, **kwargs)
+        
+        # Collect all list lengths to validate they're consistent
+        list_lengths = []
+        
+        # Check positional arguments for lists
+        for i, arg in enumerate(args):
+            if isinstance(arg, list):
+                list_lengths.append(len(arg))
+        
+        # Check keyword arguments for lists
+        for key, value in kwargs.items():
+            if isinstance(value, list):
+                list_lengths.append(len(value))
+        
+        # Validate all lists have the same length
+        if len(set(list_lengths)) > 1:
+            raise ValueError(f"All list arguments must have the same length. Found lengths: {list_lengths}")
+        
+        list_length = list_lengths[0] if list_lengths else 0
+        
+        # Process each item in the lists
+        results = []
+        for i in range(list_length):
+            # Prepare arguments for this iteration
+            new_args = []
+            for arg in args:
+                if isinstance(arg, list):
+                    new_args.append(arg[i])
+                else:
+                    new_args.append(arg)
+            
+            new_kwargs = {}
+            for key, value in kwargs.items():
+                if isinstance(value, list):
+                    new_kwargs[key] = value[i]
+                else:
+                    new_kwargs[key] = value
+            
+            # Call function with single items
+            result = func(self, *new_args, **new_kwargs)
+            results.append(result)
+        
+        # Aggregate results - transpose to group by return type
+        if results and isinstance(results[0], tuple):
+            return tuple(map(list, zip(*results)))
+        else:
+            return results
+    
+    return wrapper
+
 
 ultra_models_dir = os.path.join(models_dir, "ultralytics")
 
@@ -752,6 +816,7 @@ class BBoxToXYWH:
 
     CATEGORY = "Ultralytics/Utils"
 
+    @handle_list_inputs
     def bbox_to_xywh(self, index, bbox):
         bbox = bbox[index]
 
